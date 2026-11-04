@@ -73,7 +73,7 @@ func (f *frame) notice() bool {
 		h = f.px(52)
 	}
 	r := image.Rect(f.px(30), f.h-h-f.px(8), f.px(30)+w, f.h-f.px(8))
-	fillRound(f.dst, r, f.px(14), f.t.Rule)
+	fillRound(f.dst, r, f.px(14), f.surface())
 	mark := f.t.Dim
 	if problem {
 		mark = f.t.Accent
@@ -105,7 +105,7 @@ func window(n, room int, said float64) (from, to int) {
 // server: whether a voice pipeline is set up, and how the last turn went. Offline is a problem to show.
 func Status(configured bool, last Ending) (text string, offline bool) {
 	if !configured {
-		return "音声AIが未設定です（セットアップページ）", true
+		return "音声AIが未設定です", true
 	}
 	if last.How == EndFailed {
 		_, sub, _ := noticeText(last)

@@ -50,7 +50,7 @@ func (f *frame) resultPage() {
 
 // resultPanel draws res in r: its title, then as many rows as fit.
 func (f *frame) resultPanel(r image.Rectangle, res Lookup) {
-	fillRound(f.dst, r, f.px(16), f.t.Rule)
+	fillRound(f.dst, r, f.px(16), f.surface())
 	pad := f.px(22)
 	titleFace, labelFace, valueFace := f.text(true, 26), f.text(false, 24), f.text(false, 19)
 	inner := r.Dx() - 2*pad
@@ -71,7 +71,7 @@ func (f *frame) resultPanel(r image.Rectangle, res Lookup) {
 			break
 		}
 		if i > 0 {
-			fill(f.dst, image.Rect(r.Min.X+pad, y+gap/2, r.Max.X-pad, y+gap/2+max(1, f.px(1))), blend(f.t.Rule, f.t.Dim, 0.35))
+			fill(f.dst, image.Rect(r.Min.X+pad, y+gap/2, r.Max.X-pad, y+gap/2+max(1, f.px(1))), blend(f.surface(), f.t.Dim, 0.35))
 		}
 		y += gap + ascent(labelFace)
 		drawText(f.dst, labelFace, f.t.Text, r.Min.X+pad, y, clip(labelFace, f.words(row.Label), inner))

@@ -3,6 +3,7 @@ package nativeui
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -265,5 +266,22 @@ func TestEveryScreenDraws(t *testing.T) {
 			}
 			save(t, sc.name+"-"+sz.name, img)
 		}
+	}
+}
+
+// Cards keep their words readable in a theme whose rule color is as light as its text.
+func TestCardsReadInALightRuleTheme(t *testing.T) {
+	th := Theme{Ground: color.RGBA{0, 0, 0, 255}, Accent: color.RGBA{255, 160, 0, 255}, Text: color.RGBA{255, 204, 153, 255},
+		Dim: color.RGBA{204, 153, 204, 255}, Rule: color.RGBA{153, 153, 255, 255}}
+	u := New()
+	img := image.NewRGBA(image.Rect(0, 0, 960, 480))
+	u.Draw(img, Snapshot{Now: at, Phase: PhaseIdle, Theme: th})
+	z, _ := zoneOf(u, func(z zone) bool { return z.card != "" })
+	c := img.RGBAAt(z.rect.Min.X+30, z.rect.Max.Y-6)
+	if c == th.Rule {
+		t.Errorf("a card is filled with the rule color %v", c)
+	}
+	if lum := int(c.R) + int(c.G) + int(c.B); lum > 3*80 {
+		t.Errorf("a card on a black ground is as light as %v", c)
 	}
 }

@@ -36,6 +36,11 @@ type frame struct {
 
 func (f *frame) px(n int) int { return int(math.Round(float64(n) * f.scale)) }
 
+// surface is what cards and panels are filled with: the ground with a little of the text in it, so
+// they stand out from the ground by as much in every theme. A theme's rule color is a line's, and in
+// some themes it is as light as the text, which would leave a card's words unreadable on it.
+func (f *frame) surface() color.RGBA { return blend(f.t.Ground, f.t.Text, 0.12) }
+
 // text is the screen font at n layout pixels.
 func (f *frame) text(bold bool, n int) font.Face { return f.u.face(f.s.Font, bold, f.px(n)) }
 
@@ -131,7 +136,7 @@ func (f *frame) dashboard() {
 		titleFace, valueFace := f.text(false, 22), f.text(true, 34)
 		for i, card := range c.Cards[:n] {
 			r := image.Rect(colX, top+f.px(4)+i*(cardH+gap), colX+colW, top+f.px(4)+i*(cardH+gap)+cardH)
-			fillRound(f.dst, r, f.px(14), f.t.Rule)
+			fillRound(f.dst, r, f.px(14), f.surface())
 			pad := f.px(18)
 			title, value := f.words(card.Title, card.ID), f.words(card.Value)
 			ty := r.Min.Y + pad + ascent(titleFace)
@@ -167,7 +172,7 @@ func (f *frame) dashboard() {
 func (f *frame) detailSheet(c Card) {
 	shade(f.dst, f.dst.Rect, f.t.Ground, 200)
 	r := image.Rect(f.w*12/100, f.px(headerRoom)+f.px(10), f.w*88/100, f.h-f.px(30))
-	fillRound(f.dst, r, f.px(18), f.t.Rule)
+	fillRound(f.dst, r, f.px(18), f.surface())
 	pad := f.px(32)
 	titleFace, bodyFace, hintFace := f.text(true, 40), f.text(false, 30), f.text(false, 22)
 	y := r.Min.Y + pad + ascent(titleFace)
@@ -293,7 +298,7 @@ func (f *frame) answer() {
 	}
 	if f.s.Phase == PhaseReplying {
 		track := image.Rect(margin+f.px(70), f.h-f.px(22), f.w-margin, f.h-f.px(16))
-		fillRound(f.dst, track, track.Dy()/2, f.t.Rule)
+		fillRound(f.dst, track, track.Dy()/2, f.surface())
 		done := track
 		done.Max.X = track.Min.X + int(float64(track.Dx())*math.Max(0, math.Min(1, f.s.Said)))
 		if done.Dx() > 0 {
