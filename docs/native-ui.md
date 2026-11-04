@@ -17,6 +17,29 @@ what runs on the device.
 If the native UI panics while drawing three times, the process gives up on it. It then draws the
 standard screens until the next restart, and logs `nativeui: drawing failed`.
 
+## What it shows
+
+- **Dashboard.** The clock and the date. Cards for the device's own weather (Open-Meteo at the place
+  set on the setup page, no Home Assistant needed), today's events (the calendar links) and tasks (sent
+  by the backend). A tap opens a card's detail.
+- **Listening.** A disc that breathes, ringed by the microphone's bands.
+- **Thinking.** It says when an answer is taking long.
+- **Answer.** The reply scrolls with the voice, with a progress bar and the speaker's bands. A tap puts
+  a lingering answer away.
+- **Lookups.** What the assistant's tools found sits beside the answer: the forecast, the day's events,
+  a to-do list, search results. It stays for a minute after the turn, or until a tap.
+- **Notices.** When a turn goes unanswered, a card says why: nothing was heard, it was stopped, or
+  speech recognition, the model or the voice failed. The status line says when the voice is not set up
+  or the last turn failed.
+
+## The backend's messages
+
+The Mac mini can put up a lookup or lay cards over the dashboard's own. It does this on the remote API
+with `POST /api/v1/ui`, signed with the key made on the setup page. The schema is the backend's
+`schema/ui-message.v1.schema.json`. Unknown fields, oversized text and unknown kinds are refused. A
+message cannot set the voice's phase: that is always the device's own. Cards from the backend are shown
+for an hour after they arrive.
+
 ## What it replaces, and what it does not
 
 The native UI takes the place of the clock and the turn screens. These are all still drawn instead of
@@ -48,7 +71,13 @@ These things on the standard clock page are not shown while the native UI is on:
 | `echod/internal/feature/display/native_fork.go` | Adapter: builds the snapshot from the voice state, draws with panic fallback, sets frame pacing, routes touch. |
 | `echod/internal/config/ui.go` | The `ui.mode` setting. |
 | `echod/internal/feature/setup/ui.go` | The setup page section. |
+| `echod/internal/feature/display/native_result_fork.go` | Dashboard cards from the device's data. Lookups from tool results. Backend messages. |
+| `echod/internal/feature/activity/ended_fork.go` | `activity.Ended`: how each turn ended, for the notices. |
+| `echod/internal/feature/assistant/looked_fork.go` | `assistant.Looked`: each tool call's result, for the lookups. |
+| `echod/internal/feature/assistant/lang_fork.go` | The model is told `brain.language` (Japanese) and the fallback words follow it. |
+| `echod/internal/feature/remote/fork_routes.go` | `POST /api/v1/ui`. |
 | `echod/internal/update/releases_cronos.go` | Updates turned off, so an upstream release does not replace this build. |
+| `echod/internal/feature/voice/direct.go` | A reply ending in `？` listens again, as one ending in `?` does. |
 
 Every edit to an upstream file is a short hook marked `fork:`. To list them:
 
