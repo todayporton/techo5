@@ -28,7 +28,9 @@ const (
 // rainbowHere is whether a turn is drawn as Rainbow in this scene: chosen, and not at night, when its
 // colors would light the room; the cue (the night clock's red band, or the plain light) is drawn
 // instead.
-func rainbowHere(s scene) bool { return rainbowOn() && !s.redClockFace() && !nightNow(s.now) }
+func rainbowHere(s scene) bool {
+	return rainbowOn() && !s.redClockFace() && !nightNow(s.now) && s.native == nil // fork: native UI draws its own turn
+}
 
 // rainbowBegin moves the turn on to the frame's moment before the page is drawn, so the frame knows
 // whether the page kept under it will do (rainbowKept); rainbowTurn draws it over the page.

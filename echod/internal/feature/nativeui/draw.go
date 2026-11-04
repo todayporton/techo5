@@ -102,7 +102,7 @@ func (f *frame) dashboard() {
 			r := image.Rect(colX, top+f.px(4)+i*(cardH+gap), colX+colW, top+f.px(4)+i*(cardH+gap)+cardH)
 			fillRound(f.dst, r, f.px(14), f.t.Rule)
 			pad := f.px(18)
-			title, value := f.words(card.Title), f.words(card.Value)
+			title, value := f.words(card.Title, card.ID), f.words(card.Value)
 			ty := r.Min.Y + pad + ascent(titleFace)
 			drawText(f.dst, titleFace, f.t.Dim, r.Min.X+pad, ty, clip(titleFace, title, r.Dx()-2*pad))
 			vy := min(r.Max.Y-pad, ty+f.px(10)+ascent(valueFace))
@@ -119,7 +119,7 @@ func (f *frame) dashboard() {
 		dot = f.t.Accent
 	}
 	fillCircle(f.dst, image.Pt(margin+f.px(8), base-ascent(footFace)/2+f.px(2)), f.px(7), dot)
-	drawText(f.dst, footFace, f.t.Dim, margin+f.px(26), base, clip(footFace, f.words(c.Status), split-margin*2))
+	drawText(f.dst, footFace, f.t.Dim, margin+f.px(26), base, clip(footFace, f.words(c.Status, noJapaneseNote), split-margin*2))
 
 	label := f.words("標準画面")
 	if f.s.NoJapanese {
@@ -228,15 +228,21 @@ func (f *frame) centered(face font.Face, col color.RGBA, y int, s string) {
 	drawText(f.dst, face, col, (f.w-textWidth(face, s))/2, y, s)
 }
 
-// words is s as it can be drawn: Japanese as it is when a font has it, and a plain note in its place
-// when none does, rather than a line of boxes.
-func (f *frame) words(s string) string {
+// noJapaneseNote is said once, along the foot, in place of the words no font in reach can draw.
+const noJapaneseNote = "Japanese font not installed yet"
+
+// words is s as it can be drawn: as it is when a font has it, or else in it — a line of boxes being
+// worse than nothing — empty, or the alternative given, when s needs Japanese and no font has it.
+func (f *frame) words(s string, instead ...string) string {
 	if !f.s.NoJapanese {
 		return s
 	}
 	for _, r := range s {
 		if wide(r) {
-			return "(Japanese font not installed yet)"
+			if len(instead) > 0 {
+				return instead[0]
+			}
+			return "…"
 		}
 	}
 	return s

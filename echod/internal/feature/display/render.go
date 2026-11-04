@@ -45,6 +45,8 @@ type scene struct {
 	streaming bool // the camera is being streamed (feature/camstream)
 	listening bool // the room is being listened to in a browser (feature/babymon)
 
+	native *nativeView // fork: the native UI, when it takes the clock's and the turn's place (native_fork.go)
+
 	now     time.Time
 	phase   string  // idle, listening, thinking, replying, lingering
 	eq      *eqView // a turn's bars, when turns are drawn as the equalizer
@@ -716,6 +718,13 @@ func (r *renderer) draw(s scene) {
 	}
 	if s.showDash {
 		r.dashboardPage(s)
+		if s.showVolume {
+			r.volumeBar(s)
+		}
+		return
+	}
+
+	if s.native != nil && r.nativePage(s) { // fork: native UI (native_fork.go)
 		if s.showVolume {
 			r.volumeBar(s)
 		}

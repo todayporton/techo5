@@ -1404,6 +1404,9 @@ func (d *Display) gesture(g touch.Gesture) {
 		d.wake()
 		return
 	}
+	if d.nativeGesture(g) { // fork: native UI (native_fork.go)
+		return
+	}
 	switch g.Kind {
 	case touch.Hold:
 		d.clockHeld()
@@ -2881,6 +2884,8 @@ func (d *Display) frame() (next time.Duration) {
 	d.callShown = s.callButton
 	d.mu.Unlock()
 
+	d.nativeScene(&s, view, at, now) // fork: native UI (native_fork.go)
+
 	if s.showVideo && s.videoLive {
 		// The picture's own frames go to the panel (paintVideo); the canvas holds only the controls.
 		d.r.draw(s)
@@ -2923,6 +2928,9 @@ func (d *Display) frame() (next time.Duration) {
 		slog.Warn("presenting the frame failed", "err", err)
 	}
 	d.answerShots()
+	if next, ok := d.nativeFrame(s); ok { // fork: native UI (native_fork.go)
+		return next
+	}
 	if s.updateActive {
 		return 250 * time.Millisecond
 	}
