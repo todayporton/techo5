@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/activity"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/nativeui"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
@@ -30,7 +31,21 @@ import (
 
 func init() {
 	setup.OfferNativeUI() // the setup page offers the choice on a build that draws it
+	activity.Ended.Listen(func(o activity.Outcome) {
+		e := nativeui.Ending{How: string(o.How), Reason: string(o.Reason), Failure: o.Failure, TimedOut: o.TimedOut, At: o.At}
+		lastEnding.Store(&e)
+		if d := nativeDisplay.Load(); d != nil {
+			d.wake() // the notice goes up as the turn ends, not at the next second
+		}
+	})
 }
+
+// nativeDisplay is the display drawing the native UI, once it has: what a turn's end wakes. Not Get,
+// which would build a display in a process (a test) that has none.
+var nativeDisplay atomic.Pointer[Display]
+
+// lastEnding is how the last turn ended, from feature/activity: the dashboard's notice and status.
+var lastEnding atomic.Pointer[nativeui.Ending]
 
 // native is the native UI's state, kept between frames; nativeDraw draws it, a test's to replace.
 var (
@@ -82,6 +97,7 @@ func japaneseDrawn() bool {
 // nativeScene gives the frame's scene the native UI's part when it is to be drawn. It is worked out
 // from the voice's own state rather than s.phase, which the cue styles and screen commands rewrite.
 func (d *Display) nativeScene(s *scene, view voice.State, at, now time.Time) {
+	nativeDisplay.Store(d)
 	if !nativeWanted() || s.sunrise > 0 {
 		// The light before an alarm keeps the whole screen: the panel is the lamp in the room.
 		return
@@ -90,8 +106,14 @@ func (d *Display) nativeScene(s *scene, view voice.State, at, now time.Time) {
 	if phase == nativeui.PhaseIdle && (view.Heard != "" || view.Reply != "") && now.Sub(at) < linger() {
 		phase = nativeui.PhaseLingering
 	}
+	var ended nativeui.Ending
+	if e := lastEnding.Load(); e != nil {
+		ended = *e
+	}
+	// This fork answers without Home Assistant: a voice set up is the direct pipeline (brain.mode direct).
+	native.SetStatus(nativeui.Status(config.Get().Brain.Direct(), ended))
 	snap := nativeui.Snapshot{
-		Now: now, Phase: phase, Heard: view.Heard, Reply: view.Reply,
+		Now: now, Phase: phase, Heard: view.Heard, Reply: view.Reply, Since: at, Ended: ended,
 		Said:       voice.Spoken(view.Reply, now),
 		Font:       config.Get().Screen.Font,
 		Theme:      nativeui.Theme{Ground: walnut, Accent: amber, Text: cream, Dim: dim, Rule: ember},

@@ -245,6 +245,7 @@ func (t *Turn) Ends(how Ending) {
 		return
 	}
 	t.ended, t.how = time.Now(), how
+	defer Ended.Emit(t.outcomeLocked()) // fork: the native UI hears it too, once unlocked (ended_fork.go)
 	if t.scoreDue && t.score == 0 {
 		t.wait = time.AfterFunc(scoreWait, t.send)
 		t.mu.Unlock()

@@ -50,20 +50,38 @@ func (u *UI) Draw(dst *image.RGBA, s Snapshot) {
 	switch s.Phase {
 	case PhaseListening:
 		u.detail = ""
+		u.shown = ScreenListening
 		f.listening()
 	case PhaseThinking:
 		u.detail = ""
+		u.shown = ScreenThinking
 		f.thinking()
 	case PhaseReplying, PhaseLingering:
 		u.detail = ""
+		if s.Phase == PhaseLingering && s.Reply != "" && s.Reply == u.dismissed {
+			u.shown = ScreenDashboard
+			f.dashboard() // put away by a tap: the words linger no more
+			break
+		}
+		u.dismissed = ""
+		u.shown = ScreenAnswer
 		f.answer()
 	default:
+		u.shown = ScreenDashboard
 		f.dashboard()
 		if c := u.card(u.detail); c != nil {
+			u.shown = ScreenDetail
 			f.detailSheet(*c)
 		} else {
 			u.detail = ""
 		}
+		if f.notice() {
+			u.shown = ScreenNotice
+		}
+	}
+	u.lingering = ""
+	if s.Phase == PhaseLingering {
+		u.lingering = s.Reply
 	}
 	u.zones = f.zones
 }
@@ -155,22 +173,45 @@ func (f *frame) detailSheet(c Card) {
 	f.zones = []zone{{rect: f.dst.Rect, closes: true}}
 }
 
-// listening is the screen from the wake word until the device stops listening: a ring that breathes,
-// swelling with the microphone when its levels are known.
+// listening is the screen from the wake word until the device stops listening: a disc that breathes,
+// ringed by the microphone's bands when they are known.
 func (f *frame) listening() {
 	cx, cy := f.w/2, f.px(headerRoom)+(f.h-f.px(headerRoom))*42/100
 	breath := 0.5 + 0.5*math.Sin(float64(f.s.Now.UnixMilli()%1200)/1200*2*math.Pi)
 	level := mean(f.s.Levels)
-	r := f.px(62) + int(float64(f.px(10))*breath) + int(float64(f.px(40))*level)
-	fillCircle(f.dst, image.Pt(cx, cy), r+f.px(18), blend(f.t.Ground, f.t.Accent, 0.18))
+	r := f.px(58) + int(float64(f.px(8))*breath) + int(float64(f.px(22))*level)
+	fillCircle(f.dst, image.Pt(cx, cy), r+f.px(16), blend(f.t.Ground, f.t.Accent, 0.18))
+	f.bandRing(image.Pt(cx, cy), r+f.px(24))
 	fillCircle(f.dst, image.Pt(cx, cy), r, f.t.Accent)
-	f.centered(f.text(true, 44), f.t.Text, cy+r+f.px(70), f.words("聞いています"))
+	f.centered(f.text(true, 44), f.t.Text, cy+f.px(150), f.words("聞いています", "Listening"))
 	if f.s.Heard != "" {
-		f.centered(f.text(false, 26), f.t.Dim, cy+r+f.px(116), f.words(f.s.Heard))
+		f.centered(f.text(false, 26), f.t.Dim, cy+f.px(192), f.words(f.s.Heard))
 	}
 }
 
-// thinking is the wait for the answer: three dots taking turns, and what was heard.
+// bandRing is the bands as dots around a circle of radius r, each pushed out by its level: mirrored
+// left and right so the low bands sit at the top.
+func (f *frame) bandRing(c image.Point, r int) {
+	n := len(f.s.Levels)
+	if n == 0 {
+		return
+	}
+	const spokes = 32
+	for i := range spokes {
+		half := i
+		if half >= spokes/2 {
+			half = spokes - 1 - i
+		}
+		v := math.Max(0, math.Min(1, f.s.Levels[half*n/(spokes/2)]))
+		a := 2*math.Pi*float64(i)/spokes - math.Pi/2
+		d := float64(r) + v*float64(f.px(26))
+		p := image.Pt(c.X+int(d*math.Cos(a)), c.Y+int(d*math.Sin(a)))
+		fillCircle(f.dst, p, max(1, f.px(3)+int(v*float64(f.px(3)))), blend(f.t.Ground, f.t.Accent, 0.45+0.55*v))
+	}
+}
+
+// thinking is the wait for the answer: three dots taking turns, what was heard, and a word when it is
+// taking long.
 func (f *frame) thinking() {
 	cy := f.px(headerRoom) + f.px(110)
 	step := int(f.s.Now.UnixMilli()/300) % 3
@@ -181,7 +222,11 @@ func (f *frame) thinking() {
 		}
 		fillCircle(f.dst, image.Pt(f.w/2+(i-1)*f.px(44), cy), f.px(13), col)
 	}
-	f.centered(f.text(true, 40), f.t.Text, cy+f.px(80), f.words("考えています"))
+	title := "考えています"
+	if !f.s.Since.IsZero() && f.s.Now.Sub(f.s.Since) >= slowThinking {
+		title = "時間がかかっています…"
+	}
+	f.centered(f.text(true, 40), f.t.Text, cy+f.px(80), f.words(title, "Thinking"))
 	if f.s.Heard != "" {
 		face := f.text(false, 30)
 		lines := wrap(face, "「"+f.words(f.s.Heard)+"」", f.w-f.px(160), 3)
@@ -194,7 +239,8 @@ func (f *frame) thinking() {
 }
 
 // answer is the reply while it is said and for a while after: what was heard on one line at the top,
-// the reply below, and how far the voice has got along the foot.
+// the reply below, kept in step with the voice when it is longer than the screen, and how far the
+// voice has got along the foot. A lingering answer is put away by a tap.
 func (f *frame) answer() {
 	margin := f.px(48)
 	top := f.px(headerRoom) + f.px(8)
@@ -204,21 +250,56 @@ func (f *frame) answer() {
 		drawText(f.dst, heardFace, f.t.Dim, margin, y, clip(heardFace, "「"+f.words(f.s.Heard)+"」", f.w-2*margin))
 	}
 	y += f.px(18)
-	barRoom := f.px(36)
+	footRoom := f.px(40)
 	lh := max(1, lineHeight(replyFace))
-	lines := wrap(replyFace, f.words(f.s.Reply), f.w-2*margin, max(1, (f.h-barRoom-y)/lh))
-	for _, l := range lines {
+	room := max(1, (f.h-footRoom-y)/lh)
+	lines := wrap(replyFace, f.words(f.s.Reply), f.w-2*margin, 0)
+	said := f.s.Said
+	if f.s.Phase == PhaseLingering {
+		said = 0 // the answer from its start, to be read again
+	}
+	from, to := window(len(lines), room, said)
+	shown := append([]string(nil), lines[from:to]...)
+	if to < len(lines) && len(shown) > 0 {
+		shown[len(shown)-1] = ellipsize(replyFace, shown[len(shown)-1], f.w-2*margin)
+	}
+	if from > 0 && len(shown) > 0 {
+		shown[0] = "…" + shown[0]
+	}
+	for _, l := range shown {
 		y += lh
 		drawText(f.dst, replyFace, f.t.Text, margin, y, l)
 	}
 	if f.s.Phase == PhaseReplying {
-		track := image.Rect(margin, f.h-f.px(22), f.w-margin, f.h-f.px(16))
+		track := image.Rect(margin+f.px(70), f.h-f.px(22), f.w-margin, f.h-f.px(16))
 		fillRound(f.dst, track, track.Dy()/2, f.t.Rule)
 		done := track
 		done.Max.X = track.Min.X + int(float64(track.Dx())*math.Max(0, math.Min(1, f.s.Said)))
 		if done.Dx() > 0 {
 			fillRound(f.dst, done, track.Dy()/2, f.t.Accent)
 		}
+		f.bars(image.Rect(margin, f.h-f.px(34), margin+f.px(54), f.h-f.px(12)))
+		return
+	}
+	hint := f.text(false, 20)
+	label := f.words("タップで閉じる", "Tap to close")
+	drawText(f.dst, hint, f.t.Dim, f.w-margin-textWidth(hint, label), f.h-f.px(16), label)
+	f.zones = append(f.zones, zone{rect: f.dst.Rect, dismiss: true})
+}
+
+// bars is the speaker's bands as a little equalizer in r, or nothing when they are not known.
+func (f *frame) bars(r image.Rectangle) {
+	n := len(f.s.Levels)
+	if n == 0 {
+		return
+	}
+	gap := max(1, f.px(2))
+	w := max(1, (r.Dx()-gap*(n-1))/n)
+	for i, v := range f.s.Levels {
+		v = math.Max(0.08, math.Min(1, v))
+		h := int(float64(r.Dy()) * v)
+		x := r.Min.X + i*(w+gap)
+		fill(f.dst, image.Rect(x, r.Max.Y-h, x+w, r.Max.Y), f.t.Accent)
 	}
 }
 

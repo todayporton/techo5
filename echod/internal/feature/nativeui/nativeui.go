@@ -59,7 +59,28 @@ type Snapshot struct {
 	// NoJapanese is set when no font in reach draws Japanese (feature/cjkfont not fetched yet): the
 	// screen says so in words it can draw instead of drawing boxes.
 	NoJapanese bool
+	// Since is when the voice entered the phase it is in (or went idle).
+	Since time.Time
+	// Ended is how the last turn ended; zero before the first.
+	Ended Ending
 }
+
+// Ending is how a turn ended (feature/activity's Outcome, in this package's own words).
+type Ending struct {
+	How      string // EndAnswered, EndNoSpeech, EndCanceled, EndFailed
+	Reason   string // a canceled turn's: stopped, interrupted, cut_off, answered_elsewhere
+	Failure  string // a failed turn's code: stt-failed, intent-failed, tts-failed, ...
+	TimedOut bool
+	At       time.Time
+}
+
+// How a turn ends, as feature/activity names it.
+const (
+	EndAnswered = "answered"
+	EndNoSpeech = "no_speech"
+	EndCanceled = "canceled"
+	EndFailed   = "error"
+)
 
 // Card is one of the dashboard's tiles: a title, a value read at a glance, and the detail a tap
 // opens. ID is stable, for actions on it later.
@@ -120,20 +141,28 @@ const (
 
 // zone is a tappable place drawn in the last frame.
 type zone struct {
-	rect   image.Rectangle
-	card   string // the card's ID, or empty
-	leave  bool   // the Standard screen button
-	closes bool   // the detail sheet: a tap anywhere puts it away
+	rect    image.Rectangle
+	card    string // the card's ID, or empty
+	leave   bool   // the Standard screen button
+	closes  bool   // the detail sheet: a tap anywhere puts it away
+	dismiss bool   // a lingering answer: a tap puts it away, back to the dashboard
 }
 
 // UI is the native UI's state between frames: what is open, what was drawn where, and the faces made.
 // Draw runs on display's frame loop and Touch on the touchscreen's goroutine, so all of it is under mu.
 type UI struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// lingering is the reply of the answer the last frame showed lingering, what a tap dismisses.
+	lingering string
+	// shown is the screen the last frame drew (Shown).
+	shown   string
 	content Content
 	detail  string // the card whose detail is open, or empty
-	zones   []zone
-	faces   faceCache
+	// dismissed is the answer a tap put away while it lingered (its reply), so the dashboard comes back
+	// at once rather than when display stops calling it lingering.
+	dismissed string
+	zones     []zone
+	faces     faceCache
 }
 
 // New is a native UI showing DemoContent.
@@ -147,6 +176,13 @@ func (u *UI) SetContent(c Content) {
 	if u.detail != "" && u.card(u.detail) == nil {
 		u.detail = ""
 	}
+}
+
+// SetStatus replaces the line about the assistant, leaving the cards as they are.
+func (u *UI) SetStatus(text string, offline bool) {
+	u.mu.Lock()
+	u.content.Status, u.content.Offline = text, offline
+	u.mu.Unlock()
 }
 
 // card is the card with id in the content in hand, or nil. Called under mu.
@@ -175,6 +211,9 @@ func (u *UI) Touch(in Input) Result {
 		case z.closes:
 			u.detail = ""
 			return Handled
+		case z.dismiss:
+			u.dismissed = u.lingering
+			return Handled
 		case z.leave:
 			return Leave
 		case z.card != "":
@@ -183,6 +222,23 @@ func (u *UI) Touch(in Input) Result {
 		}
 	}
 	return Ignored
+}
+
+// Screens, as Shown names them.
+const (
+	ScreenDashboard = "dashboard"
+	ScreenDetail    = "detail"
+	ScreenNotice    = "notice"
+	ScreenListening = "listening"
+	ScreenThinking  = "thinking"
+	ScreenAnswer    = "answer"
+)
+
+// Shown is the screen the last frame drew.
+func (u *UI) Shown() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.shown
 }
 
 // Reset closes whatever is open, for a screen coming back to the native UI from another page.
@@ -205,6 +261,10 @@ func (u *UI) Next(s Snapshot) time.Duration {
 		return listenFrame
 	case PhaseReplying:
 		return replyFrame
+	}
+	if until, ok := noticeUntil(s); ok {
+		// The notice goes when it is due, not at the next whole second after.
+		return max(min(until.Sub(s.Now), time.Second), 20*time.Millisecond)
 	}
 	// On the next whole second, so the clock turns over when the second does.
 	return s.Now.Truncate(time.Second).Add(time.Second).Sub(s.Now)

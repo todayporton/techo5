@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/activity"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/nativeui"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
@@ -191,4 +192,70 @@ func TestFingersOnTheNativeUI(t *testing.T) {
 	if d.nativeGesture(touch.Gesture{Kind: touch.SwipeLeft, X: 480, Y: 240}) {
 		t.Error("a finger went to a native UI not on the screen")
 	}
+}
+
+// A turn from the wake word to the dashboard, and the ways one ends without an answer, as the voice
+// and feature/activity report them: each step draws the screen it should.
+func TestEveryTurnTransition(t *testing.T) {
+	useNative(t, true)
+	lastEnding.Store(nil)
+	t.Cleanup(func() { lastEnding.Store(nil) })
+	img := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+	d := &Display{r: newRenderer(img)}
+	clock := nativeAt
+	step := func(name string, view voice.State, at time.Time, want string) {
+		t.Helper()
+		s := scene{now: clock, phase: view.Phase, heard: view.Heard, reply: view.Reply}
+		d.nativeScene(&s, view, at, clock)
+		d.r.draw(s)
+		d.nativeFrame(s)
+		if got := native.Shown(); got != want {
+			t.Errorf("%s: %s shown, want %s", name, got, want)
+		}
+	}
+	end := func(o activity.Outcome) {
+		o.At = clock
+		activity.Ended.Emit(o)
+	}
+
+	step("idle", voice.State{Phase: "idle"}, clock, nativeui.ScreenDashboard)
+	step("wake word", voice.State{Phase: "listening"}, clock, nativeui.ScreenListening)
+	step("heard", voice.State{Phase: "thinking", Heard: "明日の天気"}, clock, nativeui.ScreenThinking)
+	step("reply", voice.State{Phase: "replying", Heard: "明日の天気", Reply: "晴れです"}, clock, nativeui.ScreenAnswer)
+	end(activity.Outcome{How: activity.Answered})
+	done := clock
+	clock = clock.Add(time.Second)
+	answered := voice.State{Phase: "idle", Heard: "明日の天気", Reply: "晴れです"}
+	step("lingering", answered, done, nativeui.ScreenAnswer)
+	if !d.nativeGesture(touch.Gesture{Kind: touch.Tap, X: 480, Y: 240}) {
+		t.Fatal("the tap on a lingering answer went to the clock")
+	}
+	step("put away", answered, done, nativeui.ScreenDashboard)
+	clock = clock.Add(time.Hour)
+	step("linger over", answered, done, nativeui.ScreenDashboard)
+
+	// Nothing said.
+	step("wake word again", voice.State{Phase: "listening"}, clock, nativeui.ScreenListening)
+	end(activity.Outcome{How: activity.NoSpeech})
+	step("nothing heard", voice.State{Phase: "idle"}, clock, nativeui.ScreenNotice)
+	clock = clock.Add(5 * time.Second)
+	step("notice gone", voice.State{Phase: "idle"}, clock, nativeui.ScreenDashboard)
+
+	// Speech-to-text down: the notice, and the status line stays a problem after it.
+	step("listening", voice.State{Phase: "listening"}, clock, nativeui.ScreenListening)
+	step("thinking", voice.State{Phase: "thinking"}, clock, nativeui.ScreenThinking)
+	end(activity.Outcome{How: activity.Failed, Failure: "stt-failed"})
+	step("failed", voice.State{Phase: "idle"}, clock, nativeui.ScreenNotice)
+
+	// A turn interrupted by a new one says nothing: the new one is on the screen.
+	clock = clock.Add(5 * time.Second)
+	step("listening", voice.State{Phase: "listening"}, clock, nativeui.ScreenListening)
+	end(activity.Outcome{How: activity.Canceled, Reason: activity.Interrupted})
+	step("interrupted", voice.State{Phase: "listening"}, clock, nativeui.ScreenListening)
+	step("idle after", voice.State{Phase: "idle"}, clock, nativeui.ScreenDashboard)
+
+	// Stopped by the button or the stop word.
+	step("replying", voice.State{Phase: "replying", Reply: "長い答え"}, clock, nativeui.ScreenAnswer)
+	end(activity.Outcome{How: activity.Canceled, Reason: activity.Stopped})
+	step("stopped", voice.State{Phase: "idle"}, clock, nativeui.ScreenNotice)
 }
