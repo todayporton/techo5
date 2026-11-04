@@ -59,6 +59,7 @@ type Config struct {
 	Tessera        Tessera        `json:"tessera,omitempty"`
 	WifiQuiet      WifiQuiet      `json:"wifi_quiet,omitempty"`
 	WifiBand       WifiBand       `json:"wifi_band,omitempty"`
+	UI             UI             `json:"ui,omitempty"` // fork: native UI (ui.go)
 }
 
 // Defaults is a device nobody has set anything on.
@@ -132,6 +133,7 @@ func (w Writer) Realtime() RealtimeWriter             { return RealtimeWriter(w)
 func (w Writer) Tessera() TesseraWriter               { return TesseraWriter(w) }
 func (w Writer) WifiQuiet() WifiQuietWriter           { return WifiQuietWriter(w) }
 func (w Writer) WifiBand() WifiBandWriter             { return WifiBandWriter(w) }
+func (w Writer) UI() UIWriter                         { return UIWriter(w) } // fork: native UI (ui.go)
 
 // Wake names one slot, since every wake word setting belongs to one.
 func (w Writer) Wake(slot int) WakeWriter { return WakeWriter{st: w.st, slot: slot} }
