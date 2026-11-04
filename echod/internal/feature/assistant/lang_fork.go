@@ -24,8 +24,13 @@ func languageLine(b config.Brain) string {
 	if name == "" {
 		name = "the language with code " + code
 	}
-	return " Always answer in " + name + ", whatever language these instructions are in, the way it is " +
+	line := " Always answer in " + name + ", whatever language these instructions are in, the way it is " +
 		"naturally spoken: numbers, times and dates as they are said in it."
+	if strings.HasPrefix(code, "ja") {
+		// Asked for 3分のタイマー, a model sent seconds: 3. The tools take seconds; say so with the units it hears.
+		line += " Tools take durations in seconds: 3分 is 180 seconds, 1時間半 is 5400 seconds, 30秒 is 30 seconds."
+	}
+	return line
 }
 
 // stuckWords is what is said when the model ran out of rounds and said nothing, in the voice's language.

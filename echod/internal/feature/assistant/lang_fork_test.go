@@ -37,3 +37,12 @@ func TestStuckWordsInJapanese(t *testing.T) {
 		t.Errorf("en: %q", got)
 	}
 }
+
+func TestJapaneseDurationsAreSpelledOutInSeconds(t *testing.T) {
+	if got := languageLine(config.Brain{Language: "ja"}); !strings.Contains(got, "3分 is 180 seconds") {
+		t.Errorf("ja: %q", got)
+	}
+	if got := languageLine(config.Brain{Language: "de"}); strings.Contains(got, "180") {
+		t.Errorf("de got the Japanese units: %q", got)
+	}
+}
