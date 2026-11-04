@@ -145,7 +145,7 @@ func (d *direct) answer(ctx context.Context, pcm []byte) {
 	// An answer that asks something wants one, and gets it without the wake word again: what Home
 	// Assistant's pipeline reports as continue_conversation for a chat model's reply that ends in a
 	// question.
-	if strings.HasSuffix(reply, "?") {
+	if strings.HasSuffix(reply, "?") || strings.HasSuffix(reply, "？") { // fork: and a Japanese question mark
 		d.post(event{kind: evContinue})
 	}
 

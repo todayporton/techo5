@@ -116,7 +116,7 @@ func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
 		return spoken(m.Content), nil
 	}
 	a.remember(added, g.Read())
-	return "Sorry, I got stuck on that one.", nil
+	return stuckWords(config.Get().Brain), nil // fork: in the voice's language (lang_fork.go)
 }
 
 // handledHere is whether the device acts on what was heard by itself (feature/display).
@@ -215,6 +215,7 @@ func instructions(b config.Brain, now time.Time) string {
 	}
 	s.WriteString("What you hear comes from speech recognition. Only when the words truly make no sense, ask the ")
 	s.WriteString("person to say it again; otherwise answer the likeliest meaning.")
+	s.WriteString(languageLine(b)) // fork: the voice's language (lang_fork.go)
 	if p := strings.TrimSpace(b.Prompt); p != "" {
 		s.WriteString("\n\n")
 		s.WriteString(p)
