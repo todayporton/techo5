@@ -21,11 +21,16 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/nativeui"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/touch"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/fonts"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/spectrum"
 )
+
+func init() {
+	setup.OfferNativeUI() // the setup page offers the choice on a build that draws it
+}
 
 // native is the native UI's state, kept between frames; nativeDraw draws it, a test's to replace.
 var (
