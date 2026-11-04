@@ -110,6 +110,7 @@ func (d *Display) nativeScene(s *scene, view voice.State, at, now time.Time) {
 	if e := lastEnding.Load(); e != nil {
 		ended = *e
 	}
+	native.SetContent(nativeContent(now))
 	// This fork answers without Home Assistant: a voice set up is the direct pipeline (brain.mode direct).
 	native.SetStatus(nativeui.Status(config.Get().Brain.Direct(), ended))
 	snap := nativeui.Snapshot{

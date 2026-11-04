@@ -13,6 +13,9 @@ import (
 
 // The layout is drawn for a 960×480 canvas (the Echo Show 5's) and scaled: px is a length in that
 // layout, frame.s(px) the same length on the canvas in hand.
+// maxCards is how many cards the dashboard's column has room for; any after are left out.
+const maxCards = 4
+
 const (
 	layoutW = 960
 	layoutH = 480
@@ -50,6 +53,9 @@ func (u *UI) Draw(dst *image.RGBA, s Snapshot) {
 	switch s.Phase {
 	case PhaseListening:
 		u.detail = ""
+		if u.result != nil && (s.Since.IsZero() || u.result.At.Before(s.Since)) {
+			u.result = nil // the last turn's: this one has looked nothing up yet
+		}
 		u.shown = ScreenListening
 		f.listening()
 	case PhaseThinking:
@@ -67,6 +73,13 @@ func (u *UI) Draw(dst *image.RGBA, s Snapshot) {
 		u.shown = ScreenAnswer
 		f.answer()
 	default:
+		if u.resultHeld(s.Now) {
+			u.detail = ""
+			u.shown = ScreenResult
+			f.resultPage()
+			break
+		}
+		u.result = nil
 		u.shown = ScreenDashboard
 		f.dashboard()
 		if c := u.card(u.detail); c != nil {
@@ -112,11 +125,11 @@ func (f *frame) dashboard() {
 	// The cards, stacked in the right column.
 	gap := f.px(14)
 	colX, colW := split, f.w-split-margin
-	n := len(c.Cards)
+	n := min(len(c.Cards), maxCards)
 	if n > 0 {
 		cardH := (footTop - top - f.px(8) - gap*(n-1)) / n
 		titleFace, valueFace := f.text(false, 22), f.text(true, 34)
-		for i, card := range c.Cards {
+		for i, card := range c.Cards[:n] {
 			r := image.Rect(colX, top+f.px(4)+i*(cardH+gap), colX+colW, top+f.px(4)+i*(cardH+gap)+cardH)
 			fillRound(f.dst, r, f.px(14), f.t.Rule)
 			pad := f.px(18)
@@ -244,16 +257,24 @@ func (f *frame) thinking() {
 func (f *frame) answer() {
 	margin := f.px(48)
 	top := f.px(headerRoom) + f.px(8)
+	footRoom := f.px(40)
 	heardFace, replyFace := f.text(false, 24), f.text(false, 36)
+	textW := f.w - 2*margin
+	if res := f.u.result; res != nil {
+		// What was looked up on the right, the words on the left, a little smaller to fit.
+		split := f.w * 55 / 100
+		f.resultPanel(image.Rect(split, top, f.w-margin, f.h-footRoom), *res)
+		textW = split - margin - f.px(24)
+		replyFace = f.text(false, 30)
+	}
 	y := top + ascent(heardFace)
 	if f.s.Heard != "" {
-		drawText(f.dst, heardFace, f.t.Dim, margin, y, clip(heardFace, "「"+f.words(f.s.Heard)+"」", f.w-2*margin))
+		drawText(f.dst, heardFace, f.t.Dim, margin, y, clip(heardFace, "「"+f.words(f.s.Heard)+"」", textW))
 	}
 	y += f.px(18)
-	footRoom := f.px(40)
 	lh := max(1, lineHeight(replyFace))
 	room := max(1, (f.h-footRoom-y)/lh)
-	lines := wrap(replyFace, f.words(f.s.Reply), f.w-2*margin, 0)
+	lines := wrap(replyFace, f.words(f.s.Reply), textW, 0)
 	said := f.s.Said
 	if f.s.Phase == PhaseLingering {
 		said = 0 // the answer from its start, to be read again
@@ -261,7 +282,7 @@ func (f *frame) answer() {
 	from, to := window(len(lines), room, said)
 	shown := append([]string(nil), lines[from:to]...)
 	if to < len(lines) && len(shown) > 0 {
-		shown[len(shown)-1] = ellipsize(replyFace, shown[len(shown)-1], f.w-2*margin)
+		shown[len(shown)-1] = ellipsize(replyFace, shown[len(shown)-1], textW)
 	}
 	if from > 0 && len(shown) > 0 {
 		shown[0] = "…" + shown[0]

@@ -192,6 +192,7 @@ func (f *Remote) serve(w http.ResponseWriter, r *http.Request) {
 		f.set(w, strings.TrimPrefix(path, "entities/"), body)
 	case path == "logs" && r.Method == http.MethodGet:
 		f.logs(w, r)
+	case forkRoute(w, r, path, body): // fork: the native UI's route (fork_routes.go)
 	default:
 		http.Error(w, "no such thing here", http.StatusNotFound)
 	}

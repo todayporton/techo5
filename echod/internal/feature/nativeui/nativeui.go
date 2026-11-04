@@ -163,6 +163,8 @@ type UI struct {
 	dismissed string
 	zones     []zone
 	faces     faceCache
+	// result is what the turn looked up (result.go), until a new turn or a tap puts it away.
+	result *Lookup
 }
 
 // New is a native UI showing DemoContent.
@@ -213,6 +215,7 @@ func (u *UI) Touch(in Input) Result {
 			return Handled
 		case z.dismiss:
 			u.dismissed = u.lingering
+			u.result = nil
 			return Handled
 		case z.leave:
 			return Leave
@@ -232,6 +235,7 @@ const (
 	ScreenListening = "listening"
 	ScreenThinking  = "thinking"
 	ScreenAnswer    = "answer"
+	ScreenResult    = "result"
 )
 
 // Shown is the screen the last frame drew.
@@ -261,6 +265,16 @@ func (u *UI) Next(s Snapshot) time.Duration {
 		return listenFrame
 	case PhaseReplying:
 		return replyFrame
+	}
+	u.mu.Lock()
+	held := u.resultHeld(s.Now)
+	var until time.Time
+	if held {
+		until = u.result.At.Add(resultHold)
+	}
+	u.mu.Unlock()
+	if held && s.Phase == PhaseIdle {
+		return max(min(until.Sub(s.Now), time.Second), 20*time.Millisecond)
 	}
 	if until, ok := noticeUntil(s); ok {
 		// The notice goes when it is due, not at the next whole second after.

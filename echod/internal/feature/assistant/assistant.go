@@ -100,6 +100,7 @@ func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
 				c.Reasoning = lookupReasoning
 			}
 			result := g.Run(call)
+			Looked.Emit(Look{Tool: call.Function.Name, Args: call.Function.Arguments, Result: result}) // fork: looked_fork.go
 			slog.Info("assistant: tool", "name", call.Function.Name, "args", call.Function.Arguments, "result", result)
 			r := llm.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: result}
 			msgs = append(msgs, r)
